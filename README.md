@@ -1,9 +1,8 @@
 # SPI Master–Slave Controller
 
-An **8-bit SPI Mode 0 Master–Slave Controller** designed from scratch using synthesizable Verilog RTL.
+An 8-bit SPI Mode 0 Master–Slave Controller designed from scratch using synthesizable Verilog RTL.
 
-This is not a firmware driver that configures a microcontroller's existing SPI peripheral.  
-This is the **hardware design** of an SPI controller — the same kind that lives inside a microcontroller chip.
+This is not a firmware driver that configures a microcontroller's existing SPI peripheral. This is the **hardware design** of an SPI controller — the same kind that lives inside a microcontroller chip. The design transfers 8 bits full-duplex in a single SPI transaction.
 
 ---
 
@@ -23,85 +22,30 @@ This is the **hardware design** of an SPI controller — the same kind that live
 
 ---
 
-## What Was Built
+## Verified Result
 
+The design was verified in behavioral simulation using a self-checking testbench.
+
+**Expected output:**
 ```
-spi_top (structural wrapper)
-  ├── spi_master
-  │     ├── clk_divider (internal)
-  │     ├── TX shift register
-  │     ├── RX shift register
-  │     ├── Bit counter
-  │     └── FSM: IDLE → TRANSFER → FINISH
-  └── spi_slave
-        ├── SCLK edge detector (sclk_d pattern)
-        ├── TX shift register
-        ├── RX shift register
-        └── FSM: IDLE → ACTIVE
+---------------------------------------------
+Master TX = 10100101 (0xA5)
+Slave  TX = 01011010 (0x5A)
+Master RX = 01011010 (0x5A)  expected 01011010 (0x5A)
+Slave  RX = 10100101 (0xA5)  expected 10100101 (0xA5)
+SCLK rising edges during CS low = 8 (expected 8)
+Final CS = 1 (expected 1)
+---------------------------------------------
+RESULT: ALL CHECKS PASSED
 ```
 
-### Key Design Decisions
-
-| Decision | Choice | Reason |
-|---|---|---|
-| SPI Mode | Mode 0 (CPOL=0, CPHA=0) | Simplest mode; most common default |
-| Data width | 8 bits | Standard byte transfer |
-| Bit order | MSB first | Conventional standard |
-| Clock architecture | Single system clock domain | Avoids CDC complexity |
-| SCLK implementation | Register (not real clock net) | Slave uses `sclk_d` for edge detection; no second clock domain |
-| Reset | Asynchronous active-high | Clean power-up and testbench reset |
-
----
-
-## Repository Structure
-
+SPI Transaction Overview:
 ```
-spi-master-slave-controller/
-│
-├── rtl/                          ← Synthesizable Verilog RTL
-│   ├── clk_divider.v             Clock divider (tick generator)
-│   ├── spi_master.v              SPI master controller
-│   ├── spi_slave.v               SPI slave controller
-│   └── spi_top.v                 Structural top-level wrapper
-│
-├── sim/                          ← Simulation files
-│   └── tb_spi_top.v              Self-checking testbench (Verilog-2001)
-│
-├── docs/                         ← Technical documentation
-│   ├── 01-project-definition.md  Problem, goal, and honest status
-│   ├── 02-requirements.md        Protocol, architecture, and functional requirements
-│   ├── 03-architecture.md        Block diagrams, module roles, transaction timeline
-│   ├── 04-spi-fundamentals.md    SPI from absolute basics to interview depth
-│   ├── 05-spi-mode-0.md          CPOL/CPHA, Mode 0 timing, sample/shift behavior
-│   ├── 06-rtl-design.md          Module-by-module RTL explanation with datapaths
-│   ├── 07-verilog-concepts.md    Every Verilog construct used, with hardware meaning
-│   ├── 08-verification.md        Testbench structure, checks, results, how to reproduce
-│   ├── 09-debugging.md           Three real bugs encountered and fixed
-│   ├── 10-limitations.md         Current constraints, honestly described
-│   ├── 11-future-improvements.md Near, medium, and long-term improvement roadmap
-│   └── 12-interview-preparation.md 25 Q&A from basics to CDC and metastability
-│
-├── learning/                     ← Personal learning journal
-│   ├── learning-log.md           Initial understanding, corrections, discoveries
-│   ├── concepts-mastered.md      Status tracking per topic
-│   └── questions-to-revisit.md   Open questions and interview practice list
-│
-├── verification/                 ← Verification records
-│   ├── test-cases.md             All test cases (TC-01 passed, others planned)
-│   ├── expected-results.md       Bit-by-bit expected outputs
-│   └── results.md                Actual simulation results
-│
-├── diagrams/                     ← Block and timing diagrams (planned)
-│   └── README.md
-│
-├── waveforms/                    ← Vivado waveform screenshots
-│   └── README.md                 Capture instructions (screenshots pending)
-│
-├── vivado/                       ← Vivado project recreation guide
-│   └── README.md
-│
-├── .gitignore                    Excludes Vivado-generated files
-└── LICENSE                       MIT
+CS:   ‾‾‾‾‾‾\_________________________/‾‾‾‾‾‾
+SCLK: ________|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|___
+MOSI: ________1___0___1___0___0___1___0___1___   ← 0xA5
+MISO: ________0___1___0___1___1___0___1___0___   ← 0x5A
+              ↑↑↑↑↑↑↑↑ 8 rising edges = 8 bits
 ```
 
 ---
@@ -131,84 +75,82 @@ vvp sim.out
 # optional: gtkwave tb_spi_top.vcd
 ```
 
-**Expected output:**
-```
----------------------------------------------
-Master TX = 10100101 (0xA5)
-Slave  TX = 01011010 (0x5A)
-Master RX = 01011010 (0x5A)  expected 01011010 (0x5A)
-Slave  RX = 10100101 (0xA5)  expected 10100101 (0xA5)
-SCLK rising edges during CS low = 8 (expected 8)
-Final CS = 1 (expected 1)
----------------------------------------------
-RESULT: ALL CHECKS PASSED
-```
-
 ---
 
-## SPI Transaction Overview
-
-The design transfers 8 bits full-duplex in a single SPI transaction:
+## Repository Structure
 
 ```
-CS:   ‾‾‾‾‾‾\_________________________/‾‾‾‾‾‾
-SCLK: ________|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|___
-MOSI: ________1___0___1___0___0___1___0___1___   ← 0xA5
-MISO: ________0___1___0___1___1___0___1___0___   ← 0x5A
-              ↑↑↑↑↑↑↑↑ 8 rising edges = 8 bits
+spi-master-slave-controller/
+│
+├── rtl/                          ← Synthesizable Verilog RTL
+│   ├── clk_divider.v
+│   ├── spi_master.v
+│   ├── spi_slave.v
+│   └── spi_top.v
+│
+├── sim/                          ← Simulation files
+│   └── tb_spi_top.v
+│
+├── docs/                         ← Technical documentation
+│   ├── 01-project-definition.md
+│   ├── 02-requirements.md
+│   ├── 03-architecture.md
+│   ├── 04-spi-fundamentals.md
+│   ├── 05-spi-mode-0.md
+│   ├── 06-rtl-design.md
+│   ├── 07-verilog-concepts.md
+│   ├── 08-verification.md
+│   ├── 09-debugging.md
+│   ├── 10-limitations.md
+│   └── 11-future-improvements.md
+│
+├── learning/                     ← Personal learning journal
+│   ├── learning-log.md
+│   ├── concepts-mastered.md
+│   ├── questions-to-revisit.md
+│   └── interview-preparation.md
+│
+├── verification/                 ← Verification records
+│   ├── test-cases.md
+│   ├── expected-results.md
+│   └── results.md
+│
+├── diagrams/                     ← Block and timing diagrams (planned)
+│   └── README.md
+│
+├── waveforms/                    ← Vivado waveform screenshots
+│   └── README.md
+│
+├── vivado/                       ← Vivado project recreation guide
+│   └── README.md
+│
+├── .gitignore                    Excludes Vivado-generated files
+└── LICENSE                       MIT
 ```
-
-After the transaction:
-- `master_rx_data` = `0x5A` (received from slave)
-- `slave_rx_data` = `0xA5` (received from master)
-
----
-
-## SPI Mode 0
-
-| Parameter | Value | Meaning |
-|---|---|---|
-| CPOL | 0 | Clock idles LOW |
-| CPHA | 0 | Sample on FIRST (rising) edge |
-| Shift edge | Falling | New bit driven on falling edge |
-| Idle SCLK | 0 | |
-
----
-
-## Parameters
-
-| Parameter | Default | Description |
-|---|---|---|
-| `CLK_DIV` | 4 | System clock cycles per SCLK half-period |
-
-At 100 MHz system clock and `CLK_DIV=4`:  
-SCLK half-period = 40 ns → SCLK = 12.5 MHz
 
 ---
 
 ## Documentation
 
-All documentation is in `docs/`. Start with:
+The `docs/` folder contains further reading for design rationale and interview depth. These are NOT required reading for evaluating the core deliverable, but they demonstrate the structured engineering approach:
 
-1. [`01-project-definition.md`](docs/01-project-definition.md) — What was built and why
-2. [`04-spi-fundamentals.md`](docs/04-spi-fundamentals.md) — SPI from the ground up
-3. [`06-rtl-design.md`](docs/06-rtl-design.md) — How the RTL works
-4. [`12-interview-preparation.md`](docs/12-interview-preparation.md) — 25 interview questions
+1. [`01-project-definition.md`](docs/01-project-definition.md)
+2. [`02-requirements.md`](docs/02-requirements.md)
+3. [`03-architecture.md`](docs/03-architecture.md)
+4. [`04-spi-fundamentals.md`](docs/04-spi-fundamentals.md)
+5. [`05-spi-mode-0.md`](docs/05-spi-mode-0.md)
+6. [`06-rtl-design.md`](docs/06-rtl-design.md)
+7. [`07-verilog-concepts.md`](docs/07-verilog-concepts.md)
+8. [`08-verification.md`](docs/08-verification.md)
+9. [`09-debugging.md`](docs/09-debugging.md)
+10. [`10-limitations.md`](docs/10-limitations.md)
+11. [`11-future-improvements.md`](docs/11-future-improvements.md)
 
 ---
 
-## About This Project
+## Learning Journal
 
-This repository was built as part of VLSI/RTL interview preparation for Mirafra Technologies (2026).
-
-The goal was to document the complete engineering journey — not just upload source files:
-- Requirements before implementation
-- Architecture before code
-- Verification evidence alongside code
-- Honest status for every claim
-- Learning notes documenting real understanding, real corrections, and real gaps
-
-The learning notes in `learning/` record the actual journey, including the acknowledgment that the initial implementation was followed without full understanding, and the subsequent work to develop genuine knowledge of every module.
+The `learning/` directory contains my personal study notes, concepts mastered trackers, and interview preparation materials. These files are kept in the repository for transparency regarding the learning journey, but they are an internal tracker and not part of the primary engineering deliverable.
 
 ---
 

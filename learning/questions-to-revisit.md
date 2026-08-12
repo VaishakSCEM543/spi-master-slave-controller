@@ -82,5 +82,5 @@ This document tracks questions, concepts, and implementation details that need d
 - [ ] Re-read `docs/05-spi-mode-0.md` and draw Mode 1, 2, 3 timing yourself
 - [ ] Re-read `docs/06-rtl-design.md` and trace through one complete bit cycle
 - [ ] Run the simulation again and capture the waveform
-- [ ] Try to answer all 25 questions in `docs/12-interview-preparation.md` without looking at the answers
+- [ ] Try to answer all 25 questions in `learning/interview-preparation.md` without looking at the answers
 - [ ] Study what Vivado synthesis reports look like (YouTube: "Vivado synthesis tutorial")
