@@ -1,0 +1,50 @@
+# ============================================================
+# .gitignore for SPI Master-Slave Controller
+# Vivado project, generated files, OS artifacts
+# ============================================================
+
+# ----- Vivado generated output -----
+*.jou
+*.log
+*.str
+*.mif
+*.xpr          # Vivado project file (generated, not tracked)
+*.xci
+*.bd
+*.bxml
+*.vds
+*.dcp
+*.bit
+*.ltx
+*.hwdef
+*.xml
+.Xil/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.sim/
+*.runs/
+*.gen/
+*.srcs/
+*.sdk/
+*.hbs/
+*.tcl_journal
+*.vcd          # VCD waveform dump (large binary, not tracked in git)
+
+# ----- Simulation output -----
+sim.out
+*.out
+dump.vcd
+
+# ----- Editor / OS -----
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.bak
+*.orig
+
+# ----- Python / Jupyter -----
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
