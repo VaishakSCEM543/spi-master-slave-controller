@@ -13,7 +13,7 @@ This is not a firmware driver that configures a microcontroller's existing SPI p
 | RTL design and implementation | ✅ DONE |
 | Behavioral simulation (Vivado) | ✅ DONE — ALL CHECKS PASSED |
 | Self-checking testbench | ✅ DONE |
-| Waveform screenshot | ⚠️ Pending commit |
+| Waveform screenshot | ✅ DONE |
 | Synthesis (Vivado) | ❌ NOT YET |
 | FPGA implementation and programming | ❌ NOT YET |
 | Physical SPI hardware validation | ❌ NOT YET |
@@ -40,6 +40,9 @@ RESULT: ALL CHECKS PASSED
 ```
 
 SPI Transaction Overview:
+
+![SPI Transaction Waveform](waveforms/tc01-spi-transaction.jpeg)
+
 ```
 CS:   ‾‾‾‾‾‾\_________________________/‾‾‾‾‾‾
 SCLK: ________|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|___

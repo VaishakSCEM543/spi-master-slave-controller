@@ -6,28 +6,9 @@ This folder stores waveform screenshots from Vivado behavioral simulation.
 
 | Waveform | Description | Status |
 |---|---|---|
-| `tc01-spi-transaction.png` | CS, SCLK, MOSI, MISO for TC-01 (0xA5 / 0x5A) | ⚠️ PENDING |
+| `tc01-spi-transaction.jpeg` | CS, SCLK, MOSI, MISO for TC-01 (0xA5 / 0x5A) | ✅ DONE |
 
-## Action Required
-
-The Vivado behavioral simulation for TC-01 was completed and **RESULT: ALL CHECKS PASSED** was observed in the Tcl console. However, the waveform screenshot was not saved at that time.
-
-### To capture the waveform:
-
-1. Reproduce the simulation using the steps in `verification/results.md`
-2. In the Vivado waveform window, add these signals:
-   - `cs`
-   - `sclk`
-   - `mosi`
-   - `miso`
-   - `busy`
-   - `done`
-   - `master_rx_data` (hex display)
-   - `slave_rx_data` (hex display)
-3. Zoom to show the full transaction (from CS falling to CS rising)
-4. Take a screenshot
-5. Save as `waveforms/tc01-spi-transaction.png`
-6. Commit to git
+![SPI Transaction Waveform](tc01-spi-transaction.jpeg)
 
 ## What the Waveform Should Show
 
