@@ -3,7 +3,8 @@
 // Purpose     : Pure structural top level - instantiates spi_master
 //               and spi_slave and wires them together via the shared
 //               SPI bus (mosi, miso, sclk, cs). Contains no logic of
-//               its own.
+//               its own, except output display latches added for FPGA
+//               hardware testing (hold rx_data on LEDs after done pulse).
 //
 // Note on naming: the original signal list (tx_data/rx_data/busy/
 // done) is expanded with master_/slave_ prefixes because this design
@@ -20,8 +21,8 @@ module spi_top #(
 
     input  wire [7:0] master_tx_data,
     input  wire [7:0] slave_tx_data,
-    output wire [7:0] master_rx_data,
-    output wire [7:0] slave_rx_data,
+    output reg  [7:0] master_rx_data,   // reg: latched for LED display
+    output reg  [7:0] slave_rx_data,    // reg: latched for LED display
 
     output wire        busy,        // master busy
     output wire        done,        // master done
@@ -34,6 +35,10 @@ module spi_top #(
     output wire cs
 );
 
+    // Internal wires from master/slave rx_data outputs
+    wire [7:0] master_rx_raw;
+    wire [7:0] slave_rx_raw;
+
     spi_master #(
         .CLK_DIV(CLK_DIV)
     ) u_master (
@@ -41,7 +46,7 @@ module spi_top #(
         .rst     (rst),
         .start   (start),
         .tx_data (master_tx_data),
-        .rx_data (master_rx_data),
+        .rx_data (master_rx_raw),
         .busy    (busy),
         .done    (done),
         .mosi    (mosi),
@@ -58,9 +63,25 @@ module spi_top #(
         .mosi    (mosi),
         .miso    (miso),
         .tx_data (slave_tx_data),
-        .rx_data (slave_rx_data),
+        .rx_data (slave_rx_raw),
         .busy    (slave_busy),
         .done    (slave_done)
     );
+
+    // ---------------------------------------------------------------
+    // Output display latches
+    // Capture rx_data into registers when 'done' pulses so the LEDs
+    // hold the result after the transaction ends. Without this, the
+    // LEDs would only flicker for one clock cycle (10 ns) - invisible.
+    // ---------------------------------------------------------------
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            master_rx_data <= 8'd0;
+            slave_rx_data  <= 8'd0;
+        end else if (done) begin
+            master_rx_data <= master_rx_raw;
+            slave_rx_data  <= slave_rx_raw;
+        end
+    end
 
 endmodule

@@ -25,7 +25,37 @@ Only clean, human-authored source files are in this repository:
 
 ## How to Recreate the Vivado Project
 
-To recreate the Vivado project from source:
+There are two ways to recreate the Vivado project from source: automatically via a Tcl script, or manually through the GUI.
+
+### Method 1: Automated (Tcl Script) - Recommended
+
+A Tcl automation script is provided to instantly generate the project and run synthesis for the **Xilinx Artix-7 XC7A35T-1CPG236C (Basys 3)**.
+
+**If you have Vivado in your system PATH:**
+1. Open a terminal / command prompt.
+2. Navigate to the `vivado` directory: `cd "d:/MIRAFRA/spi project/spi-master-slave-controller/vivado"`
+3. Run the script in batch mode:
+   ```bash
+   vivado -mode batch -source synth.tcl
+   ```
+
+**If you prefer using the Vivado GUI:**
+1. Open Vivado.
+2. At the bottom of the screen, open the **Tcl Console** tab.
+3. Use the `cd` command to navigate to the `vivado` directory. Note that Tcl uses forward slashes:
+   ```tcl
+   cd "d:/MIRAFRA/spi project/spi-master-slave-controller/vivado"
+   ```
+4. Source the script:
+   ```tcl
+   source synth.tcl
+   ```
+
+This script will create a new Vivado project under `vivado/vivado_proj/`, run synthesis, and dump timing/utilization reports into `vivado/reports/`. You can then open the `.xpr` project file in the GUI for further inspection.
+
+### Method 2: Manual (GUI)
+
+To recreate the Vivado project from source manually:
 
 1. Open Vivado
 2. Create new RTL Project
@@ -34,18 +64,18 @@ To recreate the Vivado project from source:
    - `rtl/spi_master.v`
    - `rtl/spi_slave.v`
    - `rtl/spi_top.v`
-4. **Simulation Sources** → Add Files:
+4. **Constraints** → Add Files:
+   - `vivado/constraints.xdc`
+5. **Simulation Sources** → Add Files:
    - `sim/tb_spi_top.v`
-5. Right-click `tb_spi_top` in Sources → Set as Simulation Top
-6. Target FPGA (if synthesizing): Set appropriate part number
-7. Verify hierarchy: `spi_top` → `spi_master` → `clk_divider`, `spi_slave`
-8. Run Behavioral Simulation → Check Tcl console for `RESULT: ALL CHECKS PASSED`
+6. Right-click `tb_spi_top` in Sources → Set as Simulation Top
+7. Target FPGA: Search and select **xc7a35tcpg236-1** (Basys 3).
+8. Verify hierarchy: `spi_top` → `spi_master` → `clk_divider`, `spi_slave`
+9. Run Synthesis or Behavioral Simulation as needed.
 
-## Planned: Synthesis XDC Constraints File
+## Synthesis XDC Constraints File
 
-When synthesis is run, a constraints file will be needed to:
-- Define the system clock (`create_clock`)
-- Specify that SCLK is a generated output (not a clock net) to prevent Vivado from treating it as a clock
-- Assign FPGA pin locations if implementing for a physical board
+The synthesis constraint file `constraints.xdc` targets the Basys 3 development board. Currently, it includes:
+- A 100 MHz clock definition (`create_clock`) on pin `W5`.
 
-This file will be committed here as `vivado/constraints.xdc` when available.
+If you decide to proceed to Implementation (generating a bitstream) on physical hardware, you will need to uncomment and map the I/O pins (e.g., switches, LEDs, and Pmod ports) at the bottom of the `constraints.xdc` file.
