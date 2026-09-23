@@ -14,9 +14,9 @@
 | Self-Checking Testbench | ✅ Complete |
 | Vivado Synthesis Script | ✅ Ready — targets `xc7a35tcpg236-1` |
 | Basys 3 Pin Assignments | ✅ Complete — all 46 signals mapped |
-| Synthesis (Vivado) | 🔜 In Progress |
-| FPGA Implementation | 🔜 Planned |
-| Physical Hardware Validation | 🔜 Planned |
+| Synthesis (Vivado) | ✅ Complete |
+| FPGA Implementation | ✅ Complete |
+| Physical Hardware Validation | ✅ Complete — tested on Basys 3 with 7-segment display |
 
 > This repository is an honest learning project. Claims are backed by evidence. Simulation and hardware validation are never conflated.
 
@@ -377,14 +377,17 @@ Target board: **Basys 3** · Part: **Xilinx Artix-7 `xc7a35tcpg236-1`**
 | `done` | A16 | Pmod JB Pin 2 | Transaction complete pulse |
 | `slave_busy` | B15 | Pmod JB Pin 3 | Slave busy indicator |
 | `slave_done` | B16 | Pmod JB Pin 4 | Slave done pulse |
+| `seg[6:0]` | W7, W6, U8, V8, U5, V5, U7 | 7-Segment Segments | Displays HEX values |
+| `an[3:0]` | U2, U4, V4, W4 | 7-Segment Anodes | Multiplexing display |
 
 **How to use on the board:**
 1. Set switches SW0–SW7 to the byte you want the master to send (e.g., SW7,SW5,SW3,SW0 = HIGH → `10101001 = 0xA9`)
 2. Set switches SW8–SW15 to the byte you want the slave to send back
 3. Press **BTNU** (start) — the transaction runs
-4. **LED0–LED7** show what the master received from the slave
-5. **LED8–LED15** show what the slave received from the master
-6. Connect a logic analyzer to **Pmod JA** to probe `CS`, `MOSI`, `MISO`, `SCLK` in real time
+4. **7-Segment Display** shows the results in real-time HEX format:
+   - Left two digits = Master's received byte
+   - Right two digits = Slave's received byte
+5. Connect a logic analyzer to **Pmod JA** to probe `CS`, `MOSI`, `MISO`, `SCLK` in real time
 
 <br>
 
@@ -470,7 +473,7 @@ Target board: **Basys 3** · Part: **Xilinx Artix-7 `xc7a35tcpg236-1`**
 > 5 checks: (1) master received exactly `0x5A` from slave, (2) slave received exactly `0xA5` from master, (3) exactly 8 SCLK rising edges occurred while CS was LOW, (4) CS returned HIGH after the transaction, (5) the bit patterns were correct MSB-first.
 
 **Q: What does behavioral simulation prove?**
-> That the RTL logic is functionally correct in a software model. It does NOT prove the design synthesizes cleanly, meets timing on real hardware, or works at the target FPGA frequency. Those require synthesis, implementation, and physical FPGA testing.
+> That the RTL logic is functionally correct in a software model. It does NOT prove the design synthesizes cleanly, meets timing on real hardware, or works at the target FPGA frequency. Those require synthesis, implementation, and physical FPGA testing (which we have successfully done on the Basys 3!).
 
 ---
 
@@ -535,7 +538,6 @@ I can now:
 | Fixed 8-bit data width | Cannot transfer 16/32-bit in one transaction | `parameter DATA_WIDTH = 8` |
 | Mode 0 only (CPOL=0, CPHA=0) | Incompatible with Mode 1/2/3 devices | Add `CPOL`/`CPHA` parameters |
 | Single slave only | Cannot address multiple peripherals | `parameter NUM_SLAVES = 1`, cs bus |
-| Simulation only — no FPGA hardware testing | Logic correctness proven; hardware behavior unverified | Synthesize → implement → program |
 | No FIFO | Multi-byte transfers need application-level sequencing | Add FIFO module |
 | No error detection | Silent failure if MISO is wrong | Out of scope for v1 |
 | `start` ignored when busy | If asserted during transfer, silently dropped | Add FIFO or busy check in caller |
@@ -549,13 +551,8 @@ I can now:
 ```
 v1 — Current (this repository)
 │   ✅ 8-bit Mode 0 RTL + simulation + Basys 3 pin assignments
-│
-├── Near-term
-│   ├── Run synthesis → check timing/utilization reports
-│   ├── Generate bitstream → program Basys 3
-│   ├── Probe Pmod JA with logic analyzer → verify hardware
-│   ├── Expand testbench: back-to-back, reset-mid-transfer, all-zeros, all-ones
-│   └── Capture and commit waveform screenshots
+│   ✅ Synthesis + Bitstream + Real Hardware Validation
+│   ✅ 7-segment display integration for live HEX monitoring
 │
 ├── Medium-term
 │   ├── Parameterize DATA_WIDTH
