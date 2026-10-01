@@ -1,116 +1,164 @@
+﻿// =============================================================
+// Module      : spi_slave  (v2)
+// Purpose     : SPI Slave controller supporting all 4 SPI modes
+//               (CPOL x CPHA) and parameterizable data width.
+//               All internal logic runs on the single system clock
+//               (posedge clk). SCLK is never used as a clock net.
+//
+// New parameters vs v1:
+//   DATA_WIDTH : bits per transaction (default 8)
+//   CPOL       : must match master — sets which SCLK edge is "leading"
+//   CPHA       : must match master — sets which edge samples/drives
+//
+// Edge detection (unchanged approach, generalized):
+//   sclk_d is a 1-cycle-delayed copy of SCLK (system-clock sampled).
+//   leading_edge  and trailing_edge are combinational from sclk_d vs sclk.
+//   For CPOL=0: leading=rising, trailing=falling.
+//   For CPOL=1: leading=falling, trailing=rising.
+//
+// CPHA=0 (pre-load mode):
+//   While IDLE, slave continuously drives MISO = tx_data[MSB] so it is
+//   stable before the first leading edge — satisfying CPHA=0 timing.
+//   Slave samples MOSI on the leading edge, drives next MISO bit on trailing.
+//
+// CPHA=1 (drive-on-first-edge mode):
+//   No MISO pre-load. Slave drives MISO on the leading edge itself.
+//   Slave samples MOSI on the trailing edge.
+//
+// All other design decisions unchanged from v1.
 // =============================================================
-// Module      : spi_slave
-// Purpose     : SPI Mode 0 (CPOL=0, CPHA=0) slave controller.
-//               Has NO clock of its own - SCLK and CS are inputs
-//               driven by the master. All internal logic still runs
-//               on the single system clock 'clk'; SCLK edges are
-//               detected by comparing SCLK's current sampled value
-//               to its value one system-clock cycle earlier.
-//
-// Ports
-//   clk      : system clock (same domain as the master)
-//   rst      : asynchronous, active-high reset
-//   cs       : active-low chip select, input from master
-//   sclk     : SPI clock, input from master
-//   mosi     : data in from master (input)
-//   miso     : data out to master (output)
-//   tx_data  : byte this slave will transmit back to the master
-//   rx_data  : byte received from the master, valid when 'done' pulses
-//   busy     : high while CS is asserted (transaction in progress)
-//   done     : single-cycle pulse when 8 bits have been received
-//
-// Internal registers
-//   sclk_d    : SCLK value delayed by 1 system-clock cycle, used
-//               purely for edge detection (sclk_d vs sclk).
-//   tx_shift  : shift register holding the byte being sent on MISO
-//   rx_shift  : shift register accumulating the byte received on MOSI
-//   bit_cnt   : counts bits sampled so far (0..8)
-//   state     : IDLE / ACTIVE
-//
-// State machine
-//   IDLE   : CS is high. Continuously preloads tx_shift/miso with
-//            tx_data so that the instant CS drops, MISO is already
-//            valid - satisfying CPHA=0's "data ready before first
-//            rising edge" requirement without needing a "loaded" flag.
-//   ACTIVE : CS is low.
-//              - SCLK rising edge  (sclk_d=0,sclk=1): sample MOSI
-//              - SCLK falling edge (sclk_d=1,sclk=0): shift tx_shift,
-//                drive next bit onto MISO
-//            After 8 sampled bits, latch rx_data, pulse 'done',
-//            return to IDLE.
-//
-// Reset behavior : Asynchronous reset clears all state, MISO driven 0.
-// Clocking        : Single clock domain (posedge clk only). This is
-//                    the key design choice discussed earlier - we do
-//                    NOT write "always @(posedge sclk)" because SCLK
-//                    is just a same-domain derived signal here, not
-//                    an independent clock.
-// =============================================================
-module spi_slave (
-    input  wire       clk,
-    input  wire       rst,
-    input  wire       cs,
-    input  wire       sclk,
-    input  wire       mosi,
-    output reg         miso,
-    input  wire [7:0] tx_data,
-    output reg  [7:0] rx_data,
-    output reg        busy,
-    output reg        done
+module spi_slave #(
+    parameter DATA_WIDTH = 8,   // bits per SPI transaction (must be >= 2)
+    parameter CPOL       = 0,   // must match the master's CPOL
+    parameter CPHA       = 0    // must match the master's CPHA
+) (
+    input  wire                    clk,
+    input  wire                    rst,
+    input  wire                    cs,          // active-low chip select from master
+    input  wire                    sclk,        // SPI clock from master (data reg, not clock net)
+    input  wire                    mosi,
+    output reg                     miso,
+    input  wire [DATA_WIDTH-1:0]   tx_data,     // byte to send back to master
+    output reg  [DATA_WIDTH-1:0]   rx_data,     // byte received from master, valid on done
+    output reg                     busy,
+    output reg                     done         // 1-cycle pulse
 );
 
     localparam IDLE   = 1'b0;
     localparam ACTIVE = 1'b1;
 
-    reg       state;
-    reg       sclk_d;
-    reg [7:0] tx_shift;
-    reg [7:0] rx_shift;
-    reg [3:0] bit_cnt;
+    // Bit counter: $clog2(DATA_WIDTH+1) bits to count 0..DATA_WIDTH.
+    localparam BCNT_W = $clog2(DATA_WIDTH + 1);
 
+    reg                  state;
+    reg                  sclk_d;     // 1-cycle delayed SCLK for edge detection
+    reg [DATA_WIDTH-1:0] tx_shift;
+    reg [DATA_WIDTH-1:0] rx_shift;
+    reg [BCNT_W-1:0]     bit_cnt;
+
+    // ------------------------------------------------------------------
+    // Edge detection (combinational).
+    // "Leading edge"  = SCLK transitions away from its idle level (CPOL).
+    //   CPOL=0: leading = rising  (!sclk_d && sclk)
+    //   CPOL=1: leading = falling (sclk_d  && !sclk)
+    // "Trailing edge" = SCLK returns to idle.
+    //   CPOL=0: trailing = falling (sclk_d  && !sclk)
+    //   CPOL=1: trailing = rising  (!sclk_d && sclk)
+    // ------------------------------------------------------------------
+    reg leading_edge;
+    reg trailing_edge;
+
+    always @(*) begin
+        if (CPOL == 0) begin
+            leading_edge  = (!sclk_d && sclk);   // rising
+            trailing_edge = ( sclk_d && !sclk);  // falling
+        end else begin
+            leading_edge  = ( sclk_d && !sclk);  // falling
+            trailing_edge = (!sclk_d && sclk);   // rising
+        end
+    end
+
+    // ------------------------------------------------------------------
+    // Main FSM
+    // ------------------------------------------------------------------
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             state    <= IDLE;
-            sclk_d   <= 1'b0;
-            tx_shift <= 8'd0;
-            rx_shift <= 8'd0;
-            bit_cnt  <= 4'd0;
+            sclk_d   <= CPOL[0];              // matches sclk idle level
+            tx_shift <= {DATA_WIDTH{1'b0}};
+            rx_shift <= {DATA_WIDTH{1'b0}};
+            bit_cnt  <= {BCNT_W{1'b0}};
             miso     <= 1'b0;
-            rx_data  <= 8'd0;
+            rx_data  <= {DATA_WIDTH{1'b0}};
             busy     <= 1'b0;
             done     <= 1'b0;
         end else begin
-            sclk_d <= sclk;   // 1-cycle-delayed copy, for edge detection
+            sclk_d <= sclk;   // capture for next-cycle edge detection
             done   <= 1'b0;   // default: done is a 1-cycle pulse
 
             case (state)
+
+                // ----------------------------------------------------------
+                // IDLE: CS is high. Continuously load tx_shift and
+                // pre-drive MISO (only for CPHA=0) so it is valid the
+                // instant CS drops and the first leading edge arrives.
+                // ----------------------------------------------------------
                 IDLE: begin
-                    busy     <= 1'b0;
-                    bit_cnt  <= 4'd0;
-                    tx_shift <= tx_data;
-                    miso     <= tx_data[7]; // preload MSB before CS drops
+                    busy    <= 1'b0;
+                    bit_cnt <= {BCNT_W{1'b0}};
+                    tx_shift <= tx_data;   // keep current; ready for any CS drop
+
+                    // CPHA=0: MISO must be valid BEFORE the first leading edge.
+                    // CPHA=1: MISO is driven ON the first leading edge; no pre-load.
+                    if (CPHA == 0)
+                        miso <= tx_data[DATA_WIDTH-1];
+
                     if (!cs) begin
                         state <= ACTIVE;
                         busy  <= 1'b1;
                     end
                 end
 
+                // ----------------------------------------------------------
+                // ACTIVE: CS is low.
+                //   CPHA=0: sample MOSI on leading, drive MISO on trailing.
+                //   CPHA=1: drive MISO on leading, sample MOSI on trailing.
+                // After DATA_WIDTH bits, latch rx_data, pulse done, go IDLE.
+                // ----------------------------------------------------------
                 ACTIVE: begin
                     if (cs) begin
-                        // master ended the transaction (or aborted)
+                        // Master ended or aborted the transaction.
                         state <= IDLE;
                     end else begin
-                        if (!sclk_d && sclk) begin
-                            // rising edge: sample MOSI
-                            rx_shift <= {rx_shift[6:0], mosi};
-                            bit_cnt  <= bit_cnt + 1'b1;
+
+                        if (leading_edge) begin
+                            if (CPHA == 0) begin
+                                // CPHA=0: sample MOSI on leading edge
+                                rx_shift <= {rx_shift[DATA_WIDTH-2:0], mosi};
+                                bit_cnt  <= bit_cnt + 1'b1;
+                            end else begin
+                                // CPHA=1: drive MISO on leading edge (MSB-first).
+                                // Non-blocking: miso uses OLD tx_shift (correct).
+                                miso     <= tx_shift[DATA_WIDTH-1];
+                                tx_shift <= {tx_shift[DATA_WIDTH-2:0], 1'b0};
+                            end
                         end
-                        if (sclk_d && !sclk) begin
-                            // falling edge: shift out next bit
-                            tx_shift <= {tx_shift[6:0], 1'b0};
-                            miso     <= tx_shift[6];
+
+                        if (trailing_edge) begin
+                            if (CPHA == 0) begin
+                                // CPHA=0: drive next MISO bit on trailing edge.
+                                // tx_shift[DATA_WIDTH-2] (old, via NBA) is next bit.
+                                miso     <= tx_shift[DATA_WIDTH-2];
+                                tx_shift <= {tx_shift[DATA_WIDTH-2:0], 1'b0};
+                            end else begin
+                                // CPHA=1: sample MOSI on trailing edge
+                                rx_shift <= {rx_shift[DATA_WIDTH-2:0], mosi};
+                                bit_cnt  <= bit_cnt + 1'b1;
+                            end
                         end
-                        if (bit_cnt == 4'd8) begin
+
+                        // Latch and pulse done when all bits have been sampled.
+                        if (bit_cnt == DATA_WIDTH) begin
                             rx_data <= rx_shift;
                             done    <= 1'b1;
                             state   <= IDLE;
